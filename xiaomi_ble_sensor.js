@@ -1,7 +1,7 @@
 /**
  * Xiaomi BLE 온습도계/ e잉크 시계 MQTT Sensor
  * @소스공개 : 그레고리하우스
- * @최종수정일 : 2019-06-11
+ * @최종수정일 : 2019-06-14
  */
 
 const noble = require('@abandonware/noble');
@@ -59,7 +59,7 @@ noble.on('stateChange',  function(state) {
     if ( state != "poweredOn" ) return;
     CONFIG.DEVICES.forEach(function(d){
         uuids.push(d.macAddress.toLowerCase());
-        d.reverseMac = d.macAddress.toString().split(":").reverse().join("");
+        d.reverseMac = d.macAddress.toString().toLowerCase().split(":").reverse().join("");
     });
     log("Starting scan...");
     uuids = Array.from(new Set(uuids));
