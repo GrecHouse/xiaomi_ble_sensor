@@ -58,7 +58,7 @@ var updateStatus = (deviceId, sensorType, value) => {
 noble.on('stateChange',  function(state) {
     if ( state != "poweredOn" ) return;
     CONFIG.DEVICES.forEach(function(d){
-        uuids.push(d.macAddress);
+        uuids.push(d.macAddress.toLowerCase());
         d.reverseMac = d.macAddress.toString().split(":").reverse().join("");
     });
     log("Starting scan...");
