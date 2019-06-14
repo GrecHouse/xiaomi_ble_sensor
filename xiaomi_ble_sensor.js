@@ -5,7 +5,7 @@
  */
 
 const noble = require('@abandonware/noble');
-const mqtt = require('mqtt');
+const mqtt = require('mqtt');
 const util = require('util');
 
 var uuids = [];
@@ -25,18 +25,16 @@ const CONST = {
 const CONFIG = {
     
     // *************** 환경에 맞게 수정하세요! ***************
-    // (둥근온습도계) deviceType: CONST.MJHT, sensorType: CONST.BOTH, CONST.BATT
-    // (전자잉크시계) deviceType: CONST.LYWS, sensorType: CONST.TEMP, CONST.HUMI
-    // 수정할 내용 : deviceId, macAddress
-    // 동일 기기가 여러개일 경우에 deviceId를 다르게해서 추가
+    // 디바이스 정보 추가: deviceId 는 모두 다르게 입력해야 함
+    // [둥근온습도계] deviceType: CONST.MJHT
+    // [전자잉크시계] deviceType: CONST.LYWS
     DEVICES: [
-        { deviceType: CONST.LYWS, deviceId: 'bedroom', macAddress: '00:00:00:00:00:00', sensorType: CONST.TEMP,  reverseMac: '', rawValue: '' },
-        { deviceType: CONST.LYWS, deviceId: 'bedroom', macAddress: '00:00:00:00:00:00', sensorType: CONST.HUMI,  reverseMac: '', rawValue: '' },
-        { deviceType: CONST.MJHT, deviceId: 'bathroom', macAddress: 'AA:AA:AA:AA:AA:AA', sensorType: CONST.BOTH,  reverseMac: '', rawValue: '', rawTempValue: '', rawHumiValue: '' },
-        { deviceType: CONST.MJHT, deviceId: 'bathroom', macAddress: 'AA:AA:AA:AA:AA:AA', sensorType: CONST.BATT,  reverseMac: '', rawValue: '' }
-        //,{ deviceType: CONST.MJHT, deviceId: 'room2', macAddress: 'FF:FF:FF:FF:FF:FF', sensorType: CONST.BOTH,  reverseMac: '', rawValue: '', rawTempValue: '', rawHumiValue: '' }
-        //,{ deviceType: CONST.MJHT, deviceId: 'room2', macAddress: 'FF:FF:FF:FF:FF:FF', sensorType: CONST.BATT,  reverseMac: '', rawValue: '' }
+        { deviceType: CONST.LYWS, deviceId: 'bedroom', macAddress: '00:00:00:00:00:00' }
+        ,{ deviceType: CONST.MJHT, deviceId: 'bathroom', macAddress: 'aa:aa:aa:aa:aa:aa' }
+        ,{ deviceType: CONST.MJHT, deviceId: 'kitchen', macAddress: 'ff:ff:ff:ff:ff:ff' }
     ],
+    
+    SENSORS: [],
     
     mqttBroker: 'mqtt://192.168.1.9', // *************** 환경에 맞게 수정하세요! ***************
     mqttUserName: 'username',         // *************** 환경에 맞게 수정하세요! ***************
@@ -46,21 +44,29 @@ const CONFIG = {
 };
 
 // MQTT-Broker 연결, username, password는 미사용시 삭제 가능
-const client = mqtt.connect(CONFIG.mqttBroker, {clientId: 'Xiaomi-BLE', username: CONFIG.mqttUserName, password: CONFIG.mqttPassword});
+const client = mqtt.connect(CONFIG.mqttBroker, {clientId: 'Xiaomi-BLE', username: CONFIG.mqttUserName, password: CONFIG.mqttPassword});
 
 // MQTT로 HA에 상태값 전송, (MQTT publish) xiaomible/${deviceId}/${sensorType} = ${value}
 var updateStatus = (deviceId, sensorType, value) => {
     var topic = util.format(CONFIG.mqttTopic, deviceId, sensorType);
     client.publish(topic, value, {retain: true});
-    log('[MQTT] Send to HA:', topic, '->', value);
+    log('[MQTT]', topic, '=', value);
 }
 
-noble.on('stateChange',  function(state) {
+noble.on('stateChange', function(state) {
     if ( state != "poweredOn" ) return;
     CONFIG.DEVICES.forEach(function(d){
         uuids.push(d.macAddress.toLowerCase());
-        d.reverseMac = d.macAddress.toString().toLowerCase().split(":").reverse().join("");
+        const reverseMacAddr = d.macAddress.toString().toLowerCase().split(":").reverse().join("");
+        if ( CONST.LYWS == d.deviceType ) {
+            CONFIG.SENSORS.push({deviceType: CONST.LYWS, deviceId: d.deviceId, macAddress: d.macAddress, sensorType: CONST.TEMP, reverseMac: reverseMacAddr, rawValue: ''});
+            CONFIG.SENSORS.push({deviceType: CONST.LYWS, deviceId: d.deviceId, macAddress: d.macAddress, sensorType: CONST.HUMI, reverseMac: reverseMacAddr, rawValue: ''});
+        } else if ( CONST.MJHT = d.deviceType ) {
+            CONFIG.SENSORS.push({deviceType: CONST.MJHT, deviceId: d.deviceId, macAddress: d.macAddress, sensorType: CONST.BOTH, reverseMac: reverseMacAddr, rawValue: '', rawTempValue: '', rawHumiValue: ''});
+            CONFIG.SENSORS.push({deviceType: CONST.MJHT, deviceId: d.deviceId, macAddress: d.macAddress, sensorType: CONST.BATT, reverseMac: reverseMacAddr, rawValue: ''});
+        }
     });
+    //log(JSON.stringify(CONFIG.SENSORS));
     log("Starting scan...");
     uuids = Array.from(new Set(uuids));
     noble.startScanning([], true);
@@ -71,6 +77,7 @@ noble.on('scanStart', function() { log("Scanning started."); });
 noble.on('scanStop', function() { log("Scanning stopped."); });
 
 function onDiscovery(peripheral) {
+    //log(peripheral.uuid + '/' + peripheral.advertisement.localName);
     // check allowed devices
     if (uuids.indexOf(peripheral.address)<0) return;
     var serviceData = peripheral.advertisement.serviceData;
@@ -88,7 +95,7 @@ function calculateSensorData(hexValue){
 }
 
 function parseHexData(hexData){
-    CONFIG.DEVICES.some(function(item, idx){
+    CONFIG.SENSORS.some(function(item, idx){
         if ( hexData.indexOf(item.reverseMac) > -1 ) {
             if ( CONST.LYWS == item.deviceType && hexData.length == 34 ) {
                 const hexType = hexData.substr(24,2);
